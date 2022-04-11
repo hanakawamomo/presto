@@ -266,7 +266,17 @@ public class ThriftHiveMetastore
                             getMetastoreClientThenCall(metastoreContext, client -> {
                                 Table table = client.getTable(databaseName, tableName);
                                 if (table.getTableType().equals(TableType.VIRTUAL_VIEW.name()) && !isPrestoView(table)) {
-                                    throw new HiveViewNotSupportedException(new SchemaTableName(databaseName, tableName));
+                                    // START: DBX workaround to support _presto_views_
+                                    final String viewDbPrefix = "_presto_views_";
+                                    if (databaseName.startsWith(viewDbPrefix)) {
+                                        // If there's a bad view, lets make sure we don't infinite loop
+                                        throw new HiveViewNotSupportedException(new SchemaTableName(databaseName, tableName));
+                                    }
+                                    else {
+                                        // Assume that every Hive view has a parallel Presto view
+                                        table = client.getTable(viewDbPrefix + databaseName, tableName);
+                                    }
+                                    // END: DBX workaround to support _presto_views_
                                 }
                                 return Optional.of(table);
                             })));
